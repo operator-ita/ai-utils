@@ -9,6 +9,7 @@ We built this lightweight SDK to keep your code clean, consistent, and easy to r
 ## ✨ Why use this?
 
 - **One way to rule them all**: Use the same `.generate()` method whether you're talking to Gemini, Vertex AI, or OpenAI.
+- **Unified Roles**: Don't worry about `assistant` vs `model`. Use `system`, `user`, and `assistant` everywhere.
 - **Friendly to your Notebooks**: Keeps the technical clutter hidden so you can focus on the prompts and logic.
 - **Save your energy**: Native Pydantic support means you get structured data back as real Python objects, no manual JSON parsing needed.
 - **Safe & Sound**: Uses Python's `with` statement to make sure connections are closed properly every time.
@@ -45,38 +46,64 @@ os.environ["GOOGLE_CLOUD_PROJECT"] = "your-gcp-project"
 
 ## 🛠️ How to use it
 
-### �️ Simple Chat
-No more digging through nested objects like `choices[0].message.content`. Just ask and receive!
+The `.generate()` method is the heart of this SDK. It works the same way across all providers.
+
+### 1. Simple Text with System Prompt
+You can pass a simple string or a full history. Use `system_prompt` to set the AI's behavior easily.
 
 ```python
 from ai_utils import GeminiManager
 
-# Initialize the manager
-manager = GeminiManager(model="models/gemini-2.5-flash")
+manager = GeminiManager(model="models/gemini-2.0-flash")
 
 with manager.session() as llm:
-    response = llm.generate("How do I explain recursion to a golden retriever?")
-    print(f"AI says: {response}")
+    response = llm.generate(
+        "Explain quantum physics", 
+        system_prompt="You are a friendly teacher for 10-year-olds."
+    )
+    print(f"AI: {response}")
 ```
 
-### 📊 Clean Data Extraction
-Need the AI to give you something specific? Define a class and watch the magic happen.
+### 2. Flexible JSON (json_mode)
+Use this when you want data but don't want to define a class. It returns a Python `dict`.
+
+```python
+with manager.session() as llm:
+    # No schema needed, just set json_mode=True
+    data = llm.generate(
+        "Extract name and city from 'My name is John and I live in NY'", 
+        json_mode=True
+    )
+    print(f"Name: {data['name']}, City: {data['city']}")
+```
+
+### 3. Structured Data (Pydantic)
+The most robust way. Pass a Pydantic model as the `schema`, and you'll get a fully validated object back.
 
 ```python
 from pydantic import BaseModel
-from ai_utils import OpenAIManager
 
-class MovieReview(BaseModel):
-    title: str
-    rating: int
-    is_positive: bool
-
-manager = OpenAIManager(model="gpt-4o-mini")
+class UserInfo(BaseModel):
+    name: str
+    age: int
 
 with manager.session() as llm:
-    # Get a perfectly typed object back!
-    review = llm.generate("The Matrix is a masterpiece of sci-fi", schema=MovieReview)
-    print(f"🎬 {review.title} - Score: {review.rating}/10")
+    user = llm.generate("Elias is 30 years old", schema=UserInfo)
+    print(f"👤 {user.name} is {user.age} years old.")
+```
+
+### 4. Multi-turn Chat (Unified Roles)
+The SDK automatically translates roles between providers. Use `system`, `user`, and `assistant` everywhere.
+
+```python
+history = [
+    {"role": "user", "content": "Hi, I'm David"},
+    {"role": "assistant", "content": "Nice to meet you David!"},
+    {"role": "user", "content": "What is my name?"}
+]
+
+with manager.session() as llm:
+    print(llm.generate(history)) # "Your name is David"
 ```
 
 ### 📋 List Available Models

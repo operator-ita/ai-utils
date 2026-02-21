@@ -12,8 +12,27 @@ class OpenAIClient(LLMClient):
         self.client = client
         self.model = model
 
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False) -> Union[str, T, Dict[str, Any]]:
-        messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
+    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False, system_prompt: Optional[str] = None) -> Union[str, T, Dict[str, Any]]:
+        raw_messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
+        
+        # Build the final message list with a unified standard
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+            
+        for msg in raw_messages:
+            role = msg.get("role")
+            content = msg.get("content")
+            
+            # OpenAI only accepts 'assistant', not 'model'
+            final_role = "assistant" if role in ["assistant", "model"] else role
+            
+            # Ensure content is a string (serialize if it's a dict/list from json_mode)
+            if isinstance(content, (dict, list)):
+                import json
+                content = json.dumps(content)
+                
+            messages.append({"role": final_role, "content": str(content)})
         
         try:
             if schema:
@@ -32,7 +51,7 @@ class OpenAIClient(LLMClient):
             if json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
                 # OpenAI requires "JSON" to be in the prompt for json_object mode
-                if isinstance(messages, list) and "json" not in messages[-1]["content"].lower():
+                if "json" not in messages[-1]["content"].lower():
                     messages[-1]["content"] += " (Respond in JSON format)"
 
             response = self.client.chat.completions.create(**kwargs)

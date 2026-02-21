@@ -13,7 +13,7 @@ class GeminiClient(LLMClient):
         self.client = client
         self.model = model
 
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False) -> Union[str, T, Dict[str, Any]]:
+    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False, system_prompt: Optional[str] = None) -> Union[str, T, Dict[str, Any]]:
         config = {}
         if schema:
             config['response_mime_type'] = 'application/json'
@@ -21,7 +21,39 @@ class GeminiClient(LLMClient):
         elif json_mode:
             config['response_mime_type'] = 'application/json'
 
-        contents = prompt
+        # Process roles and system instructions
+        contents = []
+        final_system_instruction = system_prompt
+
+        if isinstance(prompt, str):
+            contents = prompt
+        elif isinstance(prompt, list):
+            for msg in prompt:
+                role = msg.get("role")
+                content = msg.get("content")
+                
+                if role == "system":
+                    # If both are provided, the list's system message takes precedence or is merged
+                    final_system_instruction = f"{final_system_instruction}\n{content}" if final_system_instruction else content
+                else:
+                    # Map 'assistant' and 'model' interchangeably
+                    gemini_role = "model" if role in ["assistant", "model"] else "user"
+                    
+                    # If content is a dict/list (from a previous json_mode=True call), 
+                    # we must serialize it back to string for the 'text' part.
+                    if isinstance(content, (dict, list)):
+                        import json
+                        content = json.dumps(content)
+                        
+                    contents.append({
+                        "role": gemini_role,
+                        "parts": [{"text": str(content)}]
+                    })
+        else:
+            contents = prompt
+        
+        if final_system_instruction:
+            config['system_instruction'] = final_system_instruction
         
         try:
             res = self.client.models.generate_content(
