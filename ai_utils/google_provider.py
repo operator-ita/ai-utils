@@ -26,13 +26,42 @@ class GeminiClient(LLMClient):
         if schema:
             config['response_mime_type'] = 'application/json'
             config['response_schema'] = schema
-        elif json_mode:
+        if json_mode:
             config['response_mime_type'] = 'application/json'
 
         if tools:
-            config['tools'] = tools
+            # Transform OpenAI-style tools to Gemini format
+            # OpenAI: [{"type": "function", "function": {"name": "...", "parameters": {...}}}]
+            # Gemini: [{"function_declarations": [{"name": "...", "parameters": {...}}]}]
+            declarations = []
+            for tool in tools:
+                if isinstance(tool, dict) and tool.get("type") == "function":
+                    declarations.append(tool["function"])
+                else:
+                    declarations.append(tool)
+            
+            if declarations:
+                config['tools'] = [{"function_declarations": declarations}]
+
         if tool_choice:
-            config['tool_config'] = tool_choice
+            # Transform OpenAI tool_choice to Gemini tool_config
+            if tool_choice == "auto":
+                config['tool_config'] = {"function_calling_config": {"mode": "AUTO"}}
+            elif tool_choice == "required":
+                config['tool_config'] = {"function_calling_config": {"mode": "ANY"}}
+            elif tool_choice == "none":
+                config['tool_config'] = {"function_calling_config": {"mode": "NONE"}}
+            elif isinstance(tool_choice, dict) and "function" in tool_choice:
+                # Specific function choice
+                func_name = tool_choice["function"]["name"]
+                config['tool_config'] = {
+                    "function_calling_config": {
+                        "mode": "ANY",
+                        "allowed_function_names": [func_name]
+                    }
+                }
+            else:
+                config['tool_config'] = tool_choice
 
         # Process roles and system instructions
         contents = []

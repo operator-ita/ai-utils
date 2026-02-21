@@ -136,6 +136,12 @@ with manager.session() as llm:
 
 > **Note**: The SDK unifies the output format for tool calls. Even when using Gemini, you will receive a structure similar to OpenAI's `tool_calls`, making it easy to swap providers without changing your handling logic.
 
+The SDK also maps `tool_choice` values from OpenAI format to Gemini automatically:
+- `"auto"` is mapped to Gemini's `AUTO` mode.
+- `"required"` is mapped to Gemini's `ANY` mode.
+- `"none"` is mapped to Gemini's `NONE` mode.
+- Specific function choice (e.g., `{"function": {"name": "my_func"}}`) is also supported and translated.
+
 
 
 ### 📋 List Available Models
