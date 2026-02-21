@@ -9,8 +9,8 @@ class LLMClient(ABC):
     """Abstract client that wraps provider-specific clients."""
     
     @abstractmethod
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None) -> Union[str, T]:
-        """Generate text or structured data."""
+    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False) -> Union[str, T, Dict[str, Any]]:
+        """Generate text, structured data (Pydantic), or raw JSON."""
         pass
 
     @abstractmethod

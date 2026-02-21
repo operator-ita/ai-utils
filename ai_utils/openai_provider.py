@@ -12,7 +12,7 @@ class OpenAIClient(LLMClient):
         self.client = client
         self.model = model
 
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None) -> Union[str, T]:
+    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False) -> Union[str, T, Dict[str, Any]]:
         messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
         
         try:
@@ -23,12 +23,26 @@ class OpenAIClient(LLMClient):
                     response_format=schema,
                 )
                 return completion.choices[0].message.parsed
-            else:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                )
-                return response.choices[0].message.content
+            
+            kwargs = {
+                "model": self.model,
+                "messages": messages,
+            }
+
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+                # OpenAI requires "JSON" to be in the prompt for json_object mode
+                if isinstance(messages, list) and "json" not in messages[-1]["content"].lower():
+                    messages[-1]["content"] += " (Respond in JSON format)"
+
+            response = self.client.chat.completions.create(**kwargs)
+            content = response.choices[0].message.content
+
+            if json_mode:
+                import json
+                return json.loads(content)
+            
+            return content
         except Exception as e:
             raise RuntimeError(f"OpenAI generation failed: {e}")
 

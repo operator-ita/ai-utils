@@ -13,11 +13,13 @@ class GeminiClient(LLMClient):
         self.client = client
         self.model = model
 
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None) -> Union[str, T]:
+    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False) -> Union[str, T, Dict[str, Any]]:
         config = {}
         if schema:
             config['response_mime_type'] = 'application/json'
             config['response_schema'] = schema
+        elif json_mode:
+            config['response_mime_type'] = 'application/json'
 
         contents = prompt
         
@@ -30,6 +32,11 @@ class GeminiClient(LLMClient):
             
             if schema:
                 return schema.model_validate_json(res.text)
+            
+            if json_mode:
+                import json
+                return json.loads(res.text)
+                
             return res.text
         except Exception as e:
             raise RuntimeError(f"Gemini generation failed: {e}")
