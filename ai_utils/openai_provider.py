@@ -12,7 +12,15 @@ class OpenAIClient(LLMClient):
         self.client = client
         self.model = model
 
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False, system_prompt: Optional[str] = None) -> Union[str, T, Dict[str, Any]]:
+    def generate(
+        self,
+        prompt: Union[str, List[Dict[str, str]]],
+        schema: Optional[Type[T]] = None,
+        json_mode: bool = False,
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None
+    ) -> Union[str, T, Dict[str, Any]]:
         raw_messages = prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}]
         
         # Build the final message list with a unified standard
@@ -28,11 +36,19 @@ class OpenAIClient(LLMClient):
             final_role = "assistant" if role in ["assistant", "model"] else role
             
             # Ensure content is a string (serialize if it's a dict/list from json_mode)
-            if isinstance(content, (dict, list)):
+            if isinstance(content, (dict, list)) and content: # Only serialize if it has value
                 import json
                 content = json.dumps(content)
+            
+            message_dict = {"role": final_role, "content": str(content) if content is not None else None}
+            
+            # If there are tool_calls or tool_call_id, include them
+            if "tool_calls" in msg:
+                message_dict["tool_calls"] = msg["tool_calls"]
+            if "tool_call_id" in msg:
+                message_dict["tool_call_id"] = msg["tool_call_id"]
                 
-            messages.append({"role": final_role, "content": str(content)})
+            messages.append(message_dict)
         
         try:
             if schema:
@@ -40,7 +56,11 @@ class OpenAIClient(LLMClient):
                     model=self.model,
                     messages=messages,
                     response_format=schema,
+                    tools=tools,
+                    tool_choice=tool_choice
                 )
+                if completion.choices[0].message.tool_calls:
+                     return {"tool_calls": [tc.model_dump() for tc in completion.choices[0].message.tool_calls]}
                 return completion.choices[0].message.parsed
             
             kwargs = {
@@ -48,14 +68,24 @@ class OpenAIClient(LLMClient):
                 "messages": messages,
             }
 
+            if tools:
+                kwargs["tools"] = tools
+            if tool_choice:
+                kwargs["tool_choice"] = tool_choice
+
             if json_mode:
                 kwargs["response_format"] = {"type": "json_object"}
                 # OpenAI requires "JSON" to be in the prompt for json_object mode
-                if "json" not in messages[-1]["content"].lower():
+                if messages and messages[-1].get("content") and "json" not in messages[-1]["content"].lower():
                     messages[-1]["content"] += " (Respond in JSON format)"
 
             response = self.client.chat.completions.create(**kwargs)
-            content = response.choices[0].message.content
+            message = response.choices[0].message
+            
+            if message.tool_calls:
+                return {"tool_calls": [tc.model_dump() for tc in message.tool_calls]}
+
+            content = message.content
 
             if json_mode:
                 import json

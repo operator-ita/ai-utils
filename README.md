@@ -106,6 +106,38 @@ with manager.session() as llm:
     print(llm.generate(history)) # "Your name is David"
 ```
 
+### 5. Tool Use (Function Calling)
+You can provide tools (functions) to the model. The SDK will return `tool_calls` in a unified format if the model decides to use them.
+
+```python
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Get the current weather in a given location",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "description": "The city and state, e.g. San Francisco, CA"},
+            },
+            "required": ["location"],
+        },
+    }
+}]
+
+with manager.session() as llm:
+    response = llm.generate("What's the weather like in NY?", tools=tools)
+    
+    if isinstance(response, dict) and "tool_calls" in response:
+        for tool_call in response["tool_calls"]:
+            print(f"Tool: {tool_call['function']['name']}")
+            print(f"Args: {tool_call['function']['arguments']}")
+```
+
+> **Note**: The SDK unifies the output format for tool calls. Even when using Gemini, you will receive a structure similar to OpenAI's `tool_calls`, making it easy to swap providers without changing your handling logic.
+
+
+
 ### 📋 List Available Models
 Curious about what models your provider offers? Here's how to check their IDs and capabilities.
 

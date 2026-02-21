@@ -13,13 +13,26 @@ class GeminiClient(LLMClient):
         self.client = client
         self.model = model
 
-    def generate(self, prompt: Union[str, List[Dict[str, str]]], schema: Optional[Type[T]] = None, json_mode: bool = False, system_prompt: Optional[str] = None) -> Union[str, T, Dict[str, Any]]:
+    def generate(
+        self,
+        prompt: Union[str, List[Dict[str, str]]],
+        schema: Optional[Type[T]] = None,
+        json_mode: bool = False,
+        system_prompt: Optional[str] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None
+    ) -> Union[str, T, Dict[str, Any]]:
         config = {}
         if schema:
             config['response_mime_type'] = 'application/json'
             config['response_schema'] = schema
         elif json_mode:
             config['response_mime_type'] = 'application/json'
+
+        if tools:
+            config['tools'] = tools
+        if tool_choice:
+            config['tool_config'] = tool_choice
 
         # Process roles and system instructions
         contents = []
@@ -39,16 +52,51 @@ class GeminiClient(LLMClient):
                     # Map 'assistant' and 'model' interchangeably
                     gemini_role = "model" if role in ["assistant", "model"] else "user"
                     
-                    # If content is a dict/list (from a previous json_mode=True call), 
-                    # we must serialize it back to string for the 'text' part.
-                    if isinstance(content, (dict, list)):
-                        import json
-                        content = json.dumps(content)
-                        
-                    contents.append({
-                        "role": gemini_role,
-                        "parts": [{"text": str(content)}]
-                    })
+                    parts = []
+                    
+                    # Handle text content
+                    if content:
+                        if isinstance(content, (dict, list)):
+                            import json
+                            content = json.dumps(content)
+                        parts.append({"text": str(content)})
+                    
+                    # Handle tool calls (assistant message)
+                    if "tool_calls" in msg:
+                        for tc in msg["tool_calls"]:
+                            fc = tc.get("function")
+                            if fc:
+                                import json
+                                args = fc.get("arguments", {})
+                                if isinstance(args, str):
+                                    try:
+                                        args = json.loads(args)
+                                    except:
+                                        pass
+                                
+                                parts.append({
+                                    "function_call": {
+                                        "name": fc["name"],
+                                        "args": args
+                                    }
+                                })
+                    
+                    # Handle tool response (tool/function message)
+                    if role in ["tool", "function"]:
+                        gemini_role = "user" # Tool results are sent as 'user' role in some Gemini SDKs or 'function'
+                        # In the new genai SDK, it might be different. Let's stick to standard parts.
+                        parts.append({
+                            "function_response": {
+                                "name": msg.get("name") or msg.get("tool_call_id"),
+                                "response": content if isinstance(content, dict) else {"result": content}
+                            }
+                        })
+
+                    if parts:
+                        contents.append({
+                            "role": gemini_role,
+                            "parts": parts
+                        })
         else:
             contents = prompt
         
@@ -62,6 +110,22 @@ class GeminiClient(LLMClient):
                 config=config
             )
             
+            # Check for tool calls
+            tool_calls = []
+            for part in res.candidates[0].content.parts:
+                if part.function_call:
+                    tool_calls.append({
+                        "id": f"call_{part.function_call.name}", # Gemini doesn't always have IDs like OpenAI
+                        "type": "function",
+                        "function": {
+                            "name": part.function_call.name,
+                            "arguments": part.function_call.args
+                        }
+                    })
+            
+            if tool_calls:
+                return {"tool_calls": tool_calls}
+
             if schema:
                 return schema.model_validate_json(res.text)
             
