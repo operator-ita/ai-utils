@@ -107,9 +107,11 @@ with manager.session() as llm:
 ```
 
 ### 5. Tool Use (Function Calling)
-You can provide tools (functions) to the model. The SDK will return `tool_calls` in a unified format if the model decides to use them.
+You can provide tools (functions) to the model. The SDK returns an `AIMessage` object that unifies the response format and allows easy access to tool calls.
 
 ```python
+import json
+
 tools = [{
     "type": "function",
     "function": {
@@ -126,15 +128,35 @@ tools = [{
 }]
 
 with manager.session() as llm:
+    # 1. Get tool calls from the model
     response = llm.generate("What's the weather like in NY?", tools=tools)
     
-    if isinstance(response, dict) and "tool_calls" in response:
-        for tool_call in response["tool_calls"]:
-            print(f"Tool: {tool_call['function']['name']}")
-            print(f"Args: {tool_call['function']['arguments']}")
+    if response.tool_calls:
+        tool_call = response.tool_calls[0]
+        print(f"Tool: {tool_call.function.name}")
+        
+        # Arguments are unified as a JSON string (like OpenAI) for easy parsing
+        args = json.loads(tool_call.function.arguments)
+        print(f"City: {args['location']}")
+
+        # 2. Add the assistant message to history 
+        # (The response object works like a dict, so you can append it directly)
+        history = [{"role": "user", "content": "What's the weather like in NY?"}]
+        history.append(response)
+
+        # 3. Add the tool response to history
+        history.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": json.dumps({"weather": "sunny", "temp": "25C"})
+        })
+
+        # 4. Get final answer
+        final_answer = llm.generate(history)
+        print(f"AI: {final_answer}")
 ```
 
-> **Note**: The SDK unifies the output format for tool calls. Even when using Gemini, you will receive a structure similar to OpenAI's `tool_calls`, making it easy to swap providers without changing your handling logic.
+> **Note**: The SDK unifies the output format for tool calls using the `AIMessage` class. This class acts as a dictionary (compatible with message history lists) but also allows **dot notation** (e.g., `response.tool_calls[0].function.name`) for developer convenience.
 
 The SDK also maps `tool_choice` values from OpenAI format to Gemini automatically:
 - `"auto"` is mapped to Gemini's `AUTO` mode.

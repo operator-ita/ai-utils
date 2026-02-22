@@ -141,19 +141,29 @@ class GeminiClient(LLMClient):
             
             # Check for tool calls
             tool_calls = []
+            text_parts = []
             for part in res.candidates[0].content.parts:
                 if part.function_call:
+                    import json
+                    # Gemini returns args as dict, OpenAI as JSON string. We unify to string.
+                    args = part.function_call.args
+                    args_str = json.dumps(args) if args else "{}"
+                    
                     tool_calls.append({
-                        "id": f"call_{part.function_call.name}", # Gemini doesn't always have IDs like OpenAI
+                        "id": part.function_call.name, # Sync ID with name for Gemini
                         "type": "function",
                         "function": {
                             "name": part.function_call.name,
-                            "arguments": part.function_call.args
+                            "arguments": args_str
                         }
                     })
+                if part.text:
+                    text_parts.append(part.text)
             
             if tool_calls:
-                return {"tool_calls": tool_calls}
+                from .base import AIMessage
+                content = "".join(text_parts) if text_parts else None
+                return AIMessage(role="assistant", content=content, tool_calls=tool_calls)
 
             if schema:
                 return schema.model_validate_json(res.text)

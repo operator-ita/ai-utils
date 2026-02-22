@@ -60,7 +60,9 @@ class OpenAIClient(LLMClient):
                     tool_choice=tool_choice
                 )
                 if completion.choices[0].message.tool_calls:
-                     return {"tool_calls": [tc.model_dump() for tc in completion.choices[0].message.tool_calls]}
+                     from .base import AIMessage
+                     tcs = [tc.model_dump() for tc in completion.choices[0].message.tool_calls]
+                     return AIMessage(role="assistant", content=None, tool_calls=tcs)
                 return completion.choices[0].message.parsed
             
             kwargs = {
@@ -83,7 +85,9 @@ class OpenAIClient(LLMClient):
             message = response.choices[0].message
             
             if message.tool_calls:
-                return {"tool_calls": [tc.model_dump() for tc in message.tool_calls]}
+                from .base import AIMessage
+                tcs = [tc.model_dump() for tc in message.tool_calls]
+                return AIMessage(role="assistant", content=message.content, tool_calls=tcs)
 
             content = message.content
 
