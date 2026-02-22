@@ -191,3 +191,4 @@ This tool is built for the community. If you have ideas for new providers or fea
 - [Gemini API Rate Limits](https://ai.google.dev/gemini-api/docs/rate-limits)
 - [Legacy Google Generative AI (Avoid)](https://github.com/google-gemini/deprecated-generative-ai-python)
 - [OpenAI Python Docs](https://github.com/openai/openai-python)
+- [Codigo Facilito Repo](https://github.com/RamsesCamas/Bootcamp_AI_Engineer_Codigofacilito/tree/main/ai-engineer-bootcamp)
